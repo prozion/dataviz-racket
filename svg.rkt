@@ -1,31 +1,28 @@
 #lang racket
 
 (require racket/file)
-(require (for-syntax racket/syntax))
-(require "../base.rkt" (for-syntax "../base.rkt"))
-(require "../hash.rkt")
-(require "../io.rkt")
-(require "fonts.rkt")
-(require "../seqs.rkt" (for-syntax "../seqs.rkt"))
-(require (for-syntax "../controls.rkt"))
-(require compatibility/defmacro)
 (require racket/runtime-path)
+(require compatibility/defmacro)
+(require odysseus)
+(require "fonts.rkt")
+(require "good-old-odysseus.rkt")
+(require (for-syntax racket/syntax racket/list odysseus/list "good-old-odysseus.rkt"))
 
 (define-runtime-path rootpath "..")
 
 (provide (all-defined-out))
 
 (define-macro (svg . args)
-  (let* ( (xmlns (if (indexof? args 'xmlns) #t #f))
-          (xlink (if (indexof? args 'xlink) #t #f))
-          (styles (if (indexof? args 'styles) #t #f))
-          (scripts (if (indexof? args 'scripts) #t #f))
+  (let* ( (xmlns (if (index-of? args 'xmlns) #t #f))
+          (xlink (if (index-of? args 'xlink) #t #f))
+          (styles (if (index-of? args 'styles) #t #f))
+          (scripts (if (index-of? args 'scripts) #t #f))
           (params (car
                     (zor
                       (filter (λ (x) (and (list? x) (equal? (car x) '@))) args)
                       (list '(@)))))
           ;(viewbox (hash-ref params 'viewbox #f))
-          (body (clean (λ (x) (or (equal? x 'xmlns) (equal? x 'xlink) (and (list? x) (equal? (car x) '@)) (equal? x 'styles) (equal? x 'scripts))) args)))
+          (body (filter-not (λ (x) (or (equal? x 'xmlns) (equal? x 'xlink) (and (list? x) (equal? (car x) '@)) (equal? x 'styles) (equal? x 'scripts))) args)))
     `(svg-f ,xmlns ,xlink ,params ,styles ,scripts ,@body)))
 
 (define (svg-f
@@ -98,7 +95,7 @@
                     (attrs (hash)) . body)
                       (string-append
                         ,(string-append "<" tagname)
-                        (if ((hash-length attrs) . > . 0) (print-hash " ~a=\"~a\"" attrs) "")
+                        (if ((hash-count attrs) . > . 0) (print-hash " ~a=\"~a\"" attrs) "")
                         ">"
                         (apply str (if (empty? body) empty body))
                         ,(string-append "</" tagname ">")))
@@ -135,66 +132,3 @@
 (make-single-tag image)
 ;(define (image file #:x (x 0) #:y (y 0) #:width (width 100) #:height (height 100))
 ;  (image-tag 'x x 'y y 'width width 'height height 'xlink:href file))
-
-(module+ test
-
-  (require rackunit)
-  (require "../main.rkt")
-
-  (check-equal?
-    (svg)
-    (rtrim ; remove \r at the end of the string
-    #<<SVG
-<svg></svg>
-SVG
-))
-
-  (check-equal?
-    (svg xmlns)
-    (rtrim
-    #<<svg
-<svg xmlns="http://www.w3.org/2000/svg"></svg>
-svg
-))
-
-  (check-equal?
-    (svg xmlns xlink)
-    (rtrim
-    #<<svg
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"></svg>
-svg
-))
-
-  (check-equal? (g) "<g></g>")
-  (check-equal? (g (g)) "<g><g></g></g>")
-  (check-equal? (g (@ 'id "id0") (g)) "<g id=\"id0\"><g></g></g>")
-
-  (check-equal? (g (rect x 10)) "<g><rect x=\"10\" /></g>")
-  (check-equal? (string-length (g (rect x 10 y 10 width 100 height 100))) (string-length "<g><rect x=\"10\" y=\"10\" width=\"100\" height=\"100\" /></g>"))
-
-  ; simple case
-  (check-equal?
-    (string-length
-      (svg (@)
-        (g
-          (rect x 10 y 10 width 100 height 150 fill "red" data-comment "rect in the simple case"))))
-    (string-length (rtrim
-    #<<svg
-<svg><g><rect x="10" y="10" width="100" height="150" fill="red" data-comment="rect in the simple case" /></g></svg>
-svg
-)))
-
-  ;; more complex case
-  (check-equal?
-    (string-length
-      (svg xmlns
-        (g)
-        (g (@ 'id "group1")
-          (rect x 10 y 10 width 100 height 150 fill "green")
-          (g (g (@ 'id "subgroup1") (g (rect x 100 y 400 width 200 height 300)))))))
-    (string-length (rtrim
-    #<<svg
-<svg xmlns="http://www.w3.org/2000/svg"><g></g><g id="group1"><rect x="10" y="10" width="100" height="150" fill="green" /><g><g id="subgroup1"><g><rect x="100" y="400" width="200" height="300" /></g></g></g></g></svg>
-svg
-)))
-)
